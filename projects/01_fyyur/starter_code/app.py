@@ -78,8 +78,8 @@ class Artist(db.Model):
 class Show(db.Model):
     __tablename__ = 'show'
     id = db.Column(db.Integer, primary_key=True)
-    venue_id = db.Column(db.Integer, db.ForeignKey('venue.id'), nullable=False)
-    artist_id = db.Column(db.Integer, db.ForeignKey('artist.id'), nullable=False)
+    venue_id = db.Column(db.Integer, db.ForeignKey('venue.id',  ondelete='CASCADE'), nullable=False)
+    artist_id = db.Column(db.Integer, db.ForeignKey('artist.id',  ondelete='CASCADE'), nullable=False)
     start_time = db.Column(db.DateTime, nullable=False)
 
 #----------------------------------------------------------------------------#
@@ -275,9 +275,18 @@ def delete_venue(venue_id):
   # TODO: Complete this endpoint for taking a venue_id, and using
   # SQLAlchemy ORM to delete a record. Handle cases where the session commit could fail.
 
+  try:
+    venue = Venue.query.filter_by(id=venue_id).first()
+    db.session.delete(venue)
+    db.session.commit()
+    flash('Venue ' + venue.name + ' was successfully removed!')
+  except:
+    db.session.rollback()
+    flash('An error occurred. Venue ' + venue.name + ' could not be removed.')
+  finally:
+    return {'status': 'Success'}
   # BONUS CHALLENGE: Implement a button to delete a Venue on a Venue Page, have it so that
   # clicking that button delete it from the db then redirect the user to the homepage
-  return None
 
 #  Artists
 #  ----------------------------------------------------------------
