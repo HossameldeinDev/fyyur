@@ -14,15 +14,20 @@ from flask_wtf import Form
 from flask_migrate import Migrate
 from forms import *
 import os
+from flask_wtf.csrf import CSRFProtect
 #----------------------------------------------------------------------------#
 # App Config.
 #----------------------------------------------------------------------------#
 
 app = Flask(__name__)
+csrf = CSRFProtect(app)
 moment = Moment(app)
 app.config.from_object('config')
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
+
+
+
 #----------------------------------------------------------------------------#
 # Models.
 #----------------------------------------------------------------------------#
@@ -175,28 +180,28 @@ def show_venue(venue_id):
       seeking_talent = venue.seeking_talent
       seeking_description = venue.seeking_description
       image_link = venue.image_link
-      past_shows_count = 0
-      upcoming_shows_count = 0
+      artists_with_past_shows = db.session.query(Artist, Show).join(Show, Show.artist_id == Artist.id).\
+          join(Venue,Show.venue_id == venue.id).filter(Show.start_time <= datetime.now()).all()
+      past_shows_count = len(artists_with_past_shows)
       past_shows = []
+      for artist, show in artists_with_past_shows:
+          past_shows.append( {
+              "artist_id": artist.id,
+              "artist_name": artist.name,
+              "artist_image_link": artist.image_link,
+              "start_time": str(show.start_time)
+          })
+      artists_with_upcoming_shows = db.session.query(Artist, Show).join(Show, Show.artist_id == Artist.id).\
+          join(Venue,Show.venue_id == venue.id).filter(Show.start_time > datetime.now()).all()
+      upcoming_shows_count = len(artists_with_upcoming_shows)
       upcoming_shows = []
-      for show in venue.shows:
-          artist_id = show.artist_id
-          artist_name = show.artist.name
-          artist_image_link = show.artist.image_link
-          start_time = show.start_time
-          show_data = {
-              "artist_id": artist_id,
-              "artist_name": artist_name,
-              "artist_image_link": artist_image_link,
-              "start_time": str(start_time)
-          }
-          if start_time < datetime.now():
-              past_shows.append(show_data)
-              past_shows_count+=1
-          else:
-              upcoming_shows.append(show_data)
-              upcoming_shows_count+=1
-
+      for artist, show in artists_with_upcoming_shows:
+          upcoming_shows.append( {
+              "artist_id": artist.id,
+              "artist_name": artist.name,
+              "artist_image_link": artist.image_link,
+              "start_time": str(show.start_time)
+          })
       data = {
           "id": id,
           "name": name,
@@ -228,6 +233,9 @@ def create_venue_form():
 @app.route('/venues/create', methods=['POST'])
 def create_venue_submission():
   venue_data = VenueForm(request.form)
+  if not venue_data.validate():
+      flash('An error occurred. Input data is invalid and a new venue could not be listed')
+      return render_template('pages/home.html')
   name = venue_data.name.data
   city = venue_data.city.data
   state = venue_data.state.data
@@ -341,28 +349,28 @@ def show_artist(artist_id):
       seeking_venue = artist.seeking_venue
       seeking_description = artist.seeking_description
       image_link = artist.image_link
-      past_shows_count = 0
-      upcoming_shows_count = 0
+      venues_with_past_shows = db.session.query(Venue, Show).join(Show, Show.venue_id == Venue.id). \
+          join(Artist, Show.artist_id == artist.id).filter(Show.start_time <= datetime.now()).all()
+      past_shows_count = len(venues_with_past_shows)
       past_shows = []
+      for venue, show in venues_with_past_shows:
+          past_shows.append({
+              "venue_id": venue.id,
+              "venue_name": venue.name,
+              "venue_image_link": venue.image_link,
+              "start_time": str(show.start_time)
+          })
+      venues_with_upcoming_shows = db.session.query(Venue, Show).join(Show, Show.venue_id == Venue.id). \
+          join(Artist, Show.artist_id == artist.id).filter(Show.start_time > datetime.now()).all()
+      upcoming_shows_count = len(venues_with_upcoming_shows)
       upcoming_shows = []
-      for show in artist.shows:
-          venue_id = show.venue_id
-          venue_name = show.venue.name
-          venue_image_link = show.venue.image_link
-          start_time = show.start_time
-          show_data = {
-              "venue_id": venue_id,
-              "venue_name": venue_name,
-              "venue_image_link": venue_image_link,
-              "start_time": str(start_time)
-          }
-          if start_time < datetime.now():
-              past_shows.append(show_data)
-              past_shows_count+=1
-          else:
-              upcoming_shows.append(show_data)
-              upcoming_shows_count+=1
-
+      for venue, show in venues_with_upcoming_shows:
+          upcoming_shows.append({
+              "venue_id": venue.id,
+              "venue_name": venue.name,
+              "venue_image_link": venue.image_link,
+              "start_time": str(show.start_time)
+          })
       data = {
           "id": id,
           "name": name,
@@ -416,6 +424,9 @@ def edit_artist(artist_id):
 @app.route('/artists/<int:artist_id>/edit', methods=['POST'])
 def edit_artist_submission(artist_id):
   artist_data = ArtistForm(request.form)
+  if not artist_data.validate():
+      flash('An error occurred. Input data is invalid and Artist could not be edited')
+      return render_template('pages/home.html')
   artist = Artist.query.filter_by(id=artist_id).first()
   artist.name = artist_data.name.data
   artist.city = artist_data.city.data
@@ -479,6 +490,9 @@ def edit_venue(venue_id):
 @app.route('/venues/<int:venue_id>/edit', methods=['POST'])
 def edit_venue_submission(venue_id):
   venue_data = VenueForm(request.form)
+  if not venue_data.validate():
+      flash('An error occurred. Input data is invalid and venue could not be edited')
+      return render_template('pages/home.html')
   venue = Venue.query.filter_by(id=venue_id).first()
   venue.name = venue_data.name.data
   venue.address = venue_data.address.data
@@ -520,6 +534,9 @@ def create_artist_form():
 def create_artist_submission():
   # called upon submitting the new artist listing form
   artist_data = ArtistForm(request.form)
+  if not artist_data.validate():
+      flash('An error occurred. Input data is invalid and a new artist could not be listed')
+      return render_template('pages/home.html')
   name = artist_data.name.data
   city = artist_data.city.data
   state = artist_data.state.data
@@ -594,6 +611,7 @@ def create_shows():
 def create_show_submission():
   # called to create new shows in the db, upon submitting new show listing form
   show_data = ShowForm(request.form)
+
   artist_id = show_data.artist_id.data
   venue_id = show_data.venue_id.data
   start_time = show_data.start_time.data
